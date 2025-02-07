@@ -1,0 +1,179 @@
+#include <iostream>
+#include <mysql.h>
+#include <mysqld_error.h>
+#include <windows.h>
+#include <cstdlib>
+#include <ctime>
+#include <string>
+
+using namespace std;
+
+const char* HOST = "localhost";
+const char* USER = "root";
+const char* PW = "Ayush#2k4";
+const char* DB = "movie_booking";
+
+class Login {
+private:
+    string Id, PW;
+
+public:
+    Login() : Id(""), PW("") { }
+
+    void setId(string id) {
+        Id = id;
+    }
+
+    void setPW(string pw) {
+        PW = pw;
+    }
+
+    string getId() {
+        return Id;
+    }
+
+    string getPW() {
+        return PW;
+    }
+};
+
+string generateCaptcha(int length = 6) {
+    static const char alphanum[] =
+        "0123456789"
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz";
+    string captcha;
+    srand(time(0));
+    for (int i = 0; i < length; ++i) {
+        captcha += alphanum[rand() % (sizeof(alphanum) - 1)];
+    }
+    return captcha;
+}
+
+string encryptPassword(string text) {
+    int shift = 3;
+
+    for (int i = 0; i < text.length(); i++) {
+        if (isalpha(text[i])) {
+            char base = (isupper(text[i])) ? 'A' : 'a';
+            text[i] = (text[i] - base + shift) % 26 + base;
+        }
+        else if (isdigit(text[i])) {
+            text[i] = (text[i] - '0' + shift) % 10 + '0';
+        }
+    }
+
+    return text;
+}
+
+bool verifyCredentials(MYSQL* conn, string id, string pw) {
+    string query = "SELECT Id, PW FROM customer WHERE Id = '" + id + "'";
+    if (mysql_query(conn, query.c_str())) {
+        cout << "Error: " << mysql_error(conn) << endl;
+        return false;
+    }
+
+    MYSQL_RES* res = mysql_store_result(conn);
+    if (res) {
+        MYSQL_ROW row = mysql_fetch_row(res);
+        if (row) {
+            string storedPW = row[1];
+            if (encryptPassword(pw) == storedPW) {
+                mysql_free_result(res);
+                return true;
+            }
+        }
+        mysql_free_result(res);
+    }
+    return false;
+}
+
+int main() {
+    Login l;
+
+    MYSQL* conn;
+    conn = mysql_init(NULL);
+
+    if (!mysql_real_connect(conn, HOST, USER, PW, DB, 3306, NULL, 0)) {
+        cout << "Error: " << mysql_error(conn) << endl;
+        return 1;
+    } else {
+        cout << "Logged In Database!" << endl;
+    }
+
+    bool exit = false;
+    while (!exit) {
+        system("cls");
+        cout << "1. Signup." << endl;
+        cout << "2. Login." << endl;
+        cout << "0. Exit." << endl;
+        cout << "Enter Choice: ";
+        int val;
+        cin >> val;
+
+        cout << endl;
+
+        if (val == 1) {
+            system("cls");
+            string id, pw, userCaptcha;
+
+            cout << "Enter Email or Phone number: ";
+            cin >> id;
+
+            cout << "Enter a Strong Password: ";
+            cin >> pw;
+
+            string captcha = generateCaptcha();
+            cout << "CAPTCHA: " << captcha << endl;
+            cout << "Enter the CAPTCHA: ";
+            cin >> userCaptcha;
+
+            if (userCaptcha != captcha) {
+                cout << "CAPTCHA verification failed. Try again!" << endl;
+                Sleep(3000);
+                continue;
+            }
+
+            string encryptedPW = encryptPassword(pw);
+            string query = "INSERT INTO customer (Id, PW) VALUES ('" + id + "', '" + encryptedPW + "')";
+            if (mysql_query(conn, query.c_str())) {
+                cout << "Error: " << mysql_error(conn) << endl;
+            } else {
+                cout << "Signup Successful!" << endl;
+            }
+        } else if (val == 2) {
+            system("cls");
+            string id, pw, userCaptcha;
+
+            cout << "ENTER ID: ";
+            cin >> id;
+
+            cout << "Enter Your Password: ";
+            cin >> pw;
+
+            string captcha = generateCaptcha();
+            cout << "CAPTCHA: " << captcha << endl;
+            cout << "Enter the CAPTCHA: ";
+            cin >> userCaptcha;
+
+            if (userCaptcha != captcha) {
+                cout << "CAPTCHA verification failed. Try again!" << endl;
+                Sleep(3000);
+                continue;
+            }
+
+            if (verifyCredentials(conn, id, pw)) {
+                cout << "WELCOME! YOU ARE LOGGED IN SUCCESSFULLY" << endl;
+                Sleep(3000);
+            } else {
+                cout << "INCORRECT ID OR PASSWORD. TRY AGAIN!" << endl;
+                Sleep(3000);
+            }
+        } else if (val == 0) {
+            exit = true;
+        }
+    }
+
+    mysql_close(conn);
+    return 0;
+}
